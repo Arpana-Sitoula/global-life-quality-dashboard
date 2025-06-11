@@ -20,7 +20,7 @@ def load_data(dataset_name):
     xlsx_path = datasets_dir / f"{dataset_name}.xlsx"
     
     if csv_path.exists():
-        return pd.read_csv(csv_path)
+        return pd.read_csv(csv_path, delimiter = "," or ";")
     elif xlsx_path.exists():
         return pd.read_excel(xlsx_path)
     else:
