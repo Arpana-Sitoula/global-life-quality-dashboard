@@ -2,9 +2,11 @@ streamlit
 streamlit-option-menu
 pandas
 numpy
-matplotlib
 plotly
 scikit-learn
 pycountry
+pycountry-convert
 scipy
 networkx
+pydeck
+streamlit-echarts

@@ -3,7 +3,7 @@ from utils.utils import load_data
 import plotly.graph_objects as go
 import pandas as pd
 import pycountry
-import emoji  # For flag emojis
+
 
 st.set_page_config(
     page_title="Country Dashboard",
@@ -68,8 +68,162 @@ st.markdown("""
         vertical-align: middle;
         margin-right: 15px;
     }
+    /* Enhanced Aesthetic Sticky Note Styles */
+.sticky-note {
+    background: linear-gradient(135deg, #fff9e6 0%, #fff3cc 100%);
+    padding: 20px 18px;
+    border-radius: 8px;
+    box-shadow: 
+        0 4px 12px rgba(0,0,0,0.1),
+        0 1px 3px rgba(0,0,0,0.05),
+        inset 0 1px 0 rgba(255,255,255,0.3);
+    position: relative;
+    font-family: 'Segoe UI', 'Inter', sans-serif;
+    color: #2c3e50;
+    border: 1px solid rgba(255,193,7,0.2);
+    transform: rotate(-1deg);
+    transition: all 0.3s ease;
+    margin: 15px 0;
+}
+
+.sticky-note:hover {
+    transform: rotate(0deg) scale(1.02);
+    box-shadow: 
+        0 6px 20px rgba(0,0,0,0.15),
+        0 2px 6px rgba(0,0,0,0.1),
+        inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+/* Tape effect at the top */
+.sticky-note::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 20px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.6) 100%);
+    border-radius: 3px;
+    box-shadow: 
+        0 2px 4px rgba(0,0,0,0.1),
+        inset 0 1px 0 rgba(255,255,255,0.5);
+    border: 1px solid rgba(0,0,0,0.05);
+}
+
+/* Alternative corner fold effect */
+.sticky-note-corner::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.05) 50%);
+    border-radius: 0 8px 0 0;
+}
+
+/* Title styling */
+.sticky-note .note-title {
+    font-weight: 700;
+    font-size: 16px;
+    color: #2c3e50;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sticky-note .note-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, rgba(44,62,80,0.2), transparent);
+}
+
+/* Insight items */
+.insight-item {
+    margin: 8px 0;
+    padding: 6px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #34495e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.insight-item::before {
+    content: '•';
+    color: #f39c12;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* Hand-drawn underline effect */
+.handwritten-underline {
+    position: relative;
+}
+
+.handwritten-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 2'%3E%3Cpath d='M0,1 Q25,0 50,1 T100,1' stroke='%23f39c12' stroke-width='1' fill='none'/%3E%3C/svg%3E") repeat-x;
+    opacity: 0.7;
+}
+
+/* Paper texture overlay */
+.sticky-note::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 100% 50%, transparent 20%, rgba(255,255,255,0.1) 21%, rgba(255,255,255,0.1) 34%, transparent 35%, transparent),
+        linear-gradient(0deg, transparent 24%, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.05) 26%, transparent 27%, transparent 74%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05) 76%, transparent 77%, transparent);
+    pointer-events: none;
+    border-radius: 8px;
+}
+
+/* Pink sticky note variant */
+.sticky-note-pink {
+    background: linear-gradient(135deg, #ffeef0 0%, #ffdddd 100%);
+    border: 1px solid rgba(255,182,193,0.3);
+}
+
+.sticky-note-pink::before {
+    background: linear-gradient(135deg, rgba(255,240,245,0.9) 0%, rgba(255,240,245,0.7) 100%);
+}
+
+/* Blue sticky note variant */
+.sticky-note-blue {
+    background: linear-gradient(135deg, #e6f3ff 0%, #cce7ff 100%);
+    border: 1px solid rgba(135,206,235,0.3);
+}
+
+.sticky-note-blue::before {
+    background: linear-gradient(135deg, rgba(240,248,255,0.9) 0%, rgba(240,248,255,0.7) 100%);
+}
+
+/* Green sticky note variant */
+.sticky-note-green {
+    background: linear-gradient(135deg, #f0fff4 0%, #e6ffe6 100%);
+    border: 1px solid rgba(144,238,144,0.3);
+}
+
+.sticky-note-green::before {
+    background: linear-gradient(135deg, rgba(245,255,250,0.9) 0%, rgba(245,255,250,0.7) 100%);
+}
     </style>
 """, unsafe_allow_html=True)
+
+
 
 # -- Sidebar for country and year selection --
 with st.sidebar:
@@ -135,6 +289,7 @@ st.markdown(
 st.markdown(f'<div class="year-subtitle">Economic and Social Indicators • {selected_year}</div>', unsafe_allow_html=True)
 
 # -- Function to get country metrics --
+@st.cache_data
 def get_country_metrics(country, year):
     metrics = {}
     
@@ -276,10 +431,8 @@ with col2:
     st.title("")
 
 with col3:
-    st.markdown("**📌 Quick Insights**")
-    
+    # Build the insights list first
     insights = []
-    
     if country_metrics.get("GDP per Capita") is not None:
         gdp = country_metrics["GDP per Capita"]
         if gdp > 50000:
@@ -288,7 +441,7 @@ with col3:
             insights.append("🏗️ Developed economy")
         else:
             insights.append("🌱 Developing economy")
-    
+
     if country_metrics.get("Unemployment Rate") is not None:
         unemp = country_metrics["Unemployment Rate"]
         if unemp > 10:
@@ -297,25 +450,37 @@ with col3:
             insights.append("🟡 Moderate unemployment")
         else:
             insights.append("🟢 Low unemployment")
-    
+
     if country_metrics.get("Air Quality (PM2.5)") is not None:
         air = country_metrics["Air Quality (PM2.5)"]
         if air > 35:
             insights.append("⚠️ Poor air quality")
         elif air < 15:
             insights.append("🌿 Good air quality")
-    
+
+    # Build the complete HTML as one string
+    insights_html = ""
     if insights:
         for insight in insights:
-            st.markdown(f"- {insight}")
+            insights_html += f'        <div class="insight-item">{insight}</div>\n'
     else:
-        st.markdown("- No insights available")
-
+        insights_html = '        <div class="insight-item">No insights available</div>\n'
+    
+    # Create the complete sticky note in ONE st.markdown call
+    complete_sticky_note = f"""
+    <div class="sticky-note">
+        <div class="note-title">
+            📌 Quick Insights
+        </div>
+{insights_html}    </div>
+    """
+    
+    st.markdown(complete_sticky_note, unsafe_allow_html=True)
 # Second Row: Basic Visualisation
 col4, col5 = st.columns([1,1], gap="large")
 
 with col4:
-    st.markdown("**🎯 Performance Score**")
+    st.markdown("#### **Performance Score**")
 
     # Calculate comprehensive performance score
     if country_metrics:
@@ -388,7 +553,7 @@ with col4:
 
 with col5: 
     # Score breakdown
-    st.markdown("**📊 Score Breakdown:**")
+    st.markdown("#### **Score Breakdown:**")
    # Score dictionary
     score_data = {
         '💰 Economic': gdp_score,
@@ -434,7 +599,7 @@ with col5:
 
 # -- Third Row: Box Plot Analysis --
 st.markdown("---")
-st.markdown('<div class="section-title">📊 Box Plot: Outlier Analysis</div>', unsafe_allow_html=True)
+st.markdown("#### **Box Plot: Outlier Analysis**")
 
 # Collect data for all countries for the selected year
 box_plot_data = []
@@ -605,7 +770,7 @@ def normalize_for_trend(values):
     return normalized
 
 # Main trend visualization
-st.markdown("**📊 Historical Trends Analysis (1980 onwards)**")
+st.markdown(f"#### **Historical Trends Analysis (1980 onwards): {selected_country}**")
 
 # Get historical data from 1980
 trend_data = get_country_trends(selected_country, start_year=1980)
@@ -672,7 +837,6 @@ if len(trend_data['years']) > 1:  # Need at least 2 data points for trends
     )
     
     fig_normalized.update_layout(
-        title=f"{selected_country} - Normalized Trends Comparison (1980-Present)",
         xaxis_title="Year",
         yaxis_title="Normalized Score (0-100)",
         height=500,

@@ -1,542 +1,508 @@
 import pandas as pd
 import pycountry
+import pycountry_convert as pc
 import streamlit as st
-from utils.utils import load_data
-import networkx as nx
-import numpy as np
-from sklearn.preprocessing import StandardScaler
-from scipy.stats import pearsonr
 import plotly.graph_objects as go
+import numpy as np
+from utils.utils import load_data
+import pydeck as pdk
+import networkx as nx
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics.pairwise import cosine_similarity
+from streamlit_echarts import st_echarts
 
-# Configure Streamlit page to use full width
-st.set_page_config(
-    page_title="Global Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Global Dashboard", layout="wide")
 
-# Remove default padding and margins for full screen
+
+#---CSS Styling---
 st.markdown("""
 <style>
-    .main > div {
-        padding-top: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
-    .stApp > header {
-        background-color: transparent;
-    }
-    .stApp {
-        margin-top: -80px;
-    }
-    .country-title {
-        font-size: 3rem;
-        font-weight: bold;
-        color: #2c3e50;
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
-    .flag-title {
-        font-size: 2.5rem;
-        margin-left: 1rem;
-    }
-    .year-subtitle {
-        font-size: 1.2rem;
-        color: #7f8c8d;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .section-title {
-        font-size: 2rem;
-        font-weight: bold;
-        color: #34495e;
-        margin: 2rem 0 1rem 0;
-        text-align: center;
-    }
+.insight-box-left {
+    background-color: #f9f9f9;
+    padding: 12px 18px;
+    border-left: 4px solid #2b83ba;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: #333;
+    box-shadow: 1px 1px 5px rgba(0,0,0,0.05);
+}
+.insight-box-right {
+    background-color: #f9f9f9;
+    padding: 12px 18px;
+    border-right: 4px solid #2b83ba;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: #333;
+    box-shadow: 1px 1px 5px rgba(0,0,0,0.05);
+}
 </style>
 """, unsafe_allow_html=True)
 
-# -- Sidebar for country and year selection --
-with st.sidebar:
-    st.header("🌍 Country Selection")
-    
-    # Get all available countries
-    df_sample = load_data("gdp_capita")
-    available_countries = sorted(df_sample['Entity'].unique())
-    
-    selected_country = st.selectbox(
-        "Select Country:",
-        available_countries,
-        index=available_countries.index('Germany') if 'Germany' in available_countries else 0
-    )
-    
-    st.header("📅 Year Selection")
-    
-    # Find common years across all datasets
-    datasets = ["air_quality", "gdp_capita", "life_expectancy", "unemployment_rate"]
-    common_years = None
-    
-    for dataset in datasets:
-        df = load_data(dataset)
-        country_years = set(df[df["Entity"] == selected_country]["Year"].unique())
-        if common_years is None:
-            common_years = country_years
-        else:
-            common_years = common_years.intersection(country_years)
-    
-    if common_years:
-        year_options = sorted(common_years)
-    else:
-        year_options = sorted(set(df_sample["Year"].unique()))
-    
-    selected_year = st.selectbox(
-        "Select Year:",
-        year_options,
-        index=len(year_options)-1 if year_options else 0
-    )
 
-# -- Function to get country flag emoji --
-def get_country_flag(country_name):
+# Helper
+def get_continent(country_name):
     try:
-        country = pycountry.countries.search_fuzzy(country_name)[0]
-        alpha2 = country.alpha_2.upper()
-        return ''.join([chr(ord(c) + 127397) for c in alpha2])
+        c = pycountry.countries.lookup(country_name)
+        code = pc.country_alpha2_to_continent_code(c.alpha_2)
+        return {'AF':'Africa','NA':'North America','OC':'Oceania','AN':'Antarctica',
+                'AS':'Asia','EU':'Europe','SA':'South America'}.get(code, 'Unknown')
     except:
-        return "🌍"
+        return 'Unknown'
 
-# Get country flag
-country_flag = get_country_flag(selected_country)
-
-# -- Page Header --
-st.markdown(
-    f'<div class="country-title">'
-    f'{selected_country}'
-    f'<span class="flag-title">{country_flag}</span>'
-    f'</div>',
-    unsafe_allow_html=True
-)
-st.markdown(f'<div class="year-subtitle">Economic and Social Indicators • {selected_year}</div>', unsafe_allow_html=True)
-
-# -- Function to get country metrics --
-def get_country_metrics(country, year):
-    metrics = {}
-    
-    # Air Quality
-    df_air = load_data("air_quality")
-    df_air = df_air[(df_air["Entity"] == country) & (df_air["Year"] == year)]
-    metrics["Air Quality (PM2.5)"] = df_air["Air Quality"].mean() if not df_air.empty else None
-    
-    # GDP per Capita
-    df_gdp = load_data("gdp_capita")
-    df_gdp = df_gdp[(df_gdp["Entity"] == country) & (df_gdp["Year"] == year)]
-    metrics["GDP per Capita"] = df_gdp["GDP Per Capita"].mean() if not df_gdp.empty else None
-    
-    # Life Expectancy
-    df_life = load_data("life_expectancy")
-    df_life = df_life[(df_life["Entity"] == country) & (df_life["Year"] == year)]
-    metrics["Life Expectancy"] = df_life["life expectancy"].mean() if not df_life.empty else None
-    
-    # Unemployment Rate
-    df_unemp = load_data("unemployment_rate")
-    df_unemp = df_unemp[(df_unemp["Entity"] == country) & (df_unemp["Year"] == year)]
-    metrics["Unemployment Rate"] = df_unemp["Unemployment"].mean() if not df_unemp.empty else None
-    
-    return metrics
-
-# Get metrics for selected country and year
-country_metrics = get_country_metrics(selected_country, selected_year)
-
-# -- Advanced Country Similarity Network --
-st.markdown('<div class="section-title">🌐 Global Country Similarity Network</div>', unsafe_allow_html=True)
-
-# Get comprehensive country data for network analysis
 @st.cache_data
-def prepare_network_data(year):
-    """Prepare comprehensive country data for network analysis"""
-    network_data = []
+def build_country_metrics(year):
+    df_air = load_data("air_quality")
+    df_gdp = load_data("gdp_capita")
+    df_life = load_data("life_expectancy")
+    df_unemp = load_data("unemployment_rate")
     
-    # Get all available countries from all datasets
-    all_countries = set()
-    datasets = ["air_quality", "gdp_capita", "life_expectancy", "unemployment_rate"]
-    
-    for dataset in datasets:
-        df = load_data(dataset)
-        all_countries.update(df['Entity'].unique())
-    
-    # Filter out non-country entities
-    country_filters = [
-        'World', 'OECD', 'European Union', 'Africa', 'Asia', 'Europe', 
-        'North America', 'South America', 'Oceania', 'Sub-Saharan Africa',
-        'Middle East', 'East Asia', 'South Asia', 'Latin America'
-    ]
-    
-    all_countries = [c for c in all_countries if not any(filter_term in c for filter_term in country_filters)]
-    all_countries = sorted(all_countries)
-    
-    for country in all_countries:
-        country_data = get_country_metrics(country, year)
+    rows = []
+    for country in sorted(df_gdp['Entity'].unique()):
+        air = df_air[(df_air["Entity"] == country) & (df_air["Year"] == year)]
+        gdp = df_gdp[(df_gdp["Entity"] == country) & (df_gdp["Year"] == year)]
+        life = df_life[(df_life["Entity"] == country) & (df_life["Year"] == year)]
+        unemp = df_unemp[(df_unemp["Entity"] == country) & (df_unemp["Year"] == year)]
         
-        # Include countries with at least 2 metrics available
-        available_metrics = sum(1 for v in country_data.values() if v is not None)
-        if available_metrics >= 2:
-            processed_data = {
-                'Country': country,
-                'GDP': country_data.get("GDP per Capita", 25000),
-                'Life_Exp': country_data.get("Life Expectancy", 72),
-                'Air_Quality': country_data.get("Air Quality (PM2.5)", 25),
-                'Unemployment': country_data.get("Unemployment Rate", 6),
-                'Data_Quality': available_metrics / 4
-            }
-            network_data.append(processed_data)
-    
-    return pd.DataFrame(network_data)
+        row = {
+            "Country": country,
+            "Continent": get_continent(country),
+            "GDP_per_Capita": gdp["GDP Per Capita"].mean() if not gdp.empty else None,
+            "Life_Expectancy": life["life expectancy"].mean() if not life.empty else None,
+            "Air_Quality_PM25": air["Air Quality"].mean() if not air.empty else None,
+            "Unemployment_Rate": unemp["Unemployment"].mean() if not unemp.empty else None
+        }
+        if all(v is not None for k,v in row.items() if k not in ["Country", "Continent"]):
+            rows.append(row)
+    return pd.DataFrame(rows)
 
-# Create network data
-df_network = prepare_network_data(selected_year)
+# Sidebar controls
+df_gdp = load_data("gdp_capita")
+years = sorted(df_gdp["Year"].unique())
+available_countries = sorted(df_gdp["Entity"].unique())
 
-if len(df_network) > 10:
-    # Network analysis controls
-    col_net1, col_net2, col_net3 = st.columns(3)
-    
-    with col_net1:
-        similarity_threshold = st.slider(
-            "Connection Sensitivity", 
-            min_value=0.1, max_value=0.9, value=0.3, step=0.1,
-            help="Lower values = more connections"
-        )
-    
-    with col_net2:
-        layout_type = st.selectbox(
-            "Layout Style",
-            ["Force-directed", "Circular"],
-            help="Choose visualization layout"
-        )
-    
-    with col_net3:
-        color_metric = st.selectbox(
-            "Color by Metric",
-            ["Life_Exp", "GDP", "Air_Quality", "Unemployment"],
-            help="Metric for node coloring"
-        )
-    
-    # Prepare features for similarity calculation
-    features = ['GDP', 'Life_Exp', 'Air_Quality', 'Unemployment']
-    
-    # Normalize features
-    scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(df_network[features])
-    
-    # Calculate similarity matrix using correlation
-    similarity_matrix = np.zeros((len(df_network), len(df_network)))
-    for i in range(len(df_network)):
-        for j in range(len(df_network)):
-            if i != j:
-                try:
-                    corr, _ = pearsonr(scaled_features[i], scaled_features[j])
-                    similarity_matrix[i, j] = abs(corr) if not np.isnan(corr) else 0
-                except:
-                    similarity_matrix[i, j] = 0
-    
-    # Create network graph
-    G = nx.Graph()
-    
-    # Add nodes with attributes
-    for i, row in df_network.iterrows():
-        G.add_node(row['Country'], 
-                  gdp=row['GDP'],
-                  life_exp=row['Life_Exp'],
-                  air_quality=row['Air_Quality'],
-                  unemployment=row['Unemployment'])
-    
-    # Add edges based on similarity threshold
-    edge_count = 0
-    for i in range(len(df_network)):
-        for j in range(i+1, len(df_network)):
-            similarity = similarity_matrix[i, j]
-            if similarity > similarity_threshold:
-                G.add_edge(df_network.iloc[i]['Country'], 
-                          df_network.iloc[j]['Country'],
-                          weight=similarity)
-                edge_count += 1
-    
-    # Choose layout
-    if layout_type == "Circular":
-        pos = nx.circular_layout(G, scale=2)
-    else:  # Force-directed
-        pos = nx.spring_layout(G, k=2, iterations=100, seed=42)
-    
-    # Prepare data for Plotly visualization
-    edge_x, edge_y = [], []
-    
-    for edge in G.edges():
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
-    
-    # Prepare node data
-    node_x, node_y, node_text, node_size, node_color = [], [], [], [], []
-    
-    for node in G.nodes():
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-        
-        # Get node attributes
-        attrs = G.nodes[node]
-        gdp = attrs['gdp']
-        life_exp = attrs['life_exp']
-        air_qual = attrs['air_quality']
-        unemployment = attrs['unemployment']
-        
-        # Create hover text
-        node_text.append(
-            f"<b>{node}</b><br>" +
-            f"GDP per Capita: ${gdp:,.0f}<br>" +
-            f"Life Expectancy: {life_exp:.1f} years<br>" +
-            f"Air Quality: {air_qual:.1f} μg/m³<br>" +
-            f"Unemployment: {unemployment:.1f}%<br>" +
-            f"Connections: {len(list(G.neighbors(node)))}"
-        )
-        
-        # Node size based on GDP
-        node_size.append(max(15, min(50, gdp/2000)))
-        
-        # Node color based on selected metric
-        if color_metric == "Life_Exp":
-            node_color.append(life_exp)
-        elif color_metric == "GDP":
-            node_color.append(gdp)
-        elif color_metric == "Air_Quality":
-            node_color.append(air_qual)
-        else:  # Unemployment
-            node_color.append(unemployment)
-    
-    # Create the network visualization
-    fig_network = go.Figure()
-    
-    # Add edges
-    if edge_x and edge_y:
-        fig_network.add_trace(go.Scatter(
-            x=edge_x, y=edge_y,
-            line=dict(width=1, color='rgba(125,125,125,0.4)'),
-            hoverinfo='none',
-            mode='lines',
-            showlegend=False
-        ))
-    
-    # Add nodes
-    if node_x and node_y:
-        fig_network.add_trace(go.Scatter(
-            x=node_x, y=node_y,
-            mode='markers+text',
-            hoverinfo='text',
-            text=[country[:3].upper() if len(country) > 10 else country for country in G.nodes()],
-            textposition="middle center",
-            textfont=dict(size=8, color="white", family="Arial Black"),
-            hovertext=node_text,
-            marker=dict(
-                size=node_size,
-                color=node_color,
-                colorscale='Viridis',
-                showscale=True,
-                colorbar=dict(title=color_metric.replace('_', ' ').title()),
-                line=dict(width=2, color='rgba(255,255,255,0.8)'),
-                opacity=0.8
-            ),
-            showlegend=False
-        ))
-    
-    # Update layout for full width
-    fig_network.update_layout(
-        title=dict(
-            text=f"Global Country Similarity Network - {selected_year}<br>" +
-                 f"<sub>{len(G.nodes())} countries, {edge_count} connections</sub>",
-            x=0.5,
-            font=dict(size=16, color="#2c3e50")
-        ),
-        font_size=12,
-        showlegend=False,
-        height=700,
-        plot_bgcolor='rgba(240,248,255,0.8)',
-        paper_bgcolor='white',
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        margin=dict(l=10, r=10, t=80, b=10)
-    )
-    
-    st.plotly_chart(fig_network, use_container_width=True)
-    
-    # Network insights
-    col_insight1, col_insight2, col_insight3 = st.columns(3)
-    
-    with col_insight1:
-        density = nx.density(G) if len(G.nodes()) > 1 else 0
-        st.metric(
-            "🔗 Network Density", 
-            f"{density:.2%}",
-            help="Percentage of possible connections that exist"
-        )
-    
-    with col_insight2:
-        if G.nodes():
-            most_connected = max(G.nodes(), key=lambda x: len(list(G.neighbors(x))))
-            st.metric(
-                "🌟 Most Connected", 
-                most_connected,
-                delta=f"{len(list(G.neighbors(most_connected)))} connections"
-            )
-        else:
-            st.metric("🌟 Most Connected", "N/A")
-    
-    with col_insight3:
-        try:
-            communities = list(nx.community.greedy_modularity_communities(G))
-            st.metric(
-                "🎯 Communities", 
-                len(communities),
-                help="Number of distinct country clusters"
-            )
-        except:
-            st.metric("🎯 Communities", "1")
+with st.sidebar:
+    st.header("📅 Year Selection")
+    selected_year = st.selectbox("Select Year", years, index=years.index(2019) if 2019 in years else len(years)-1)
 
+# Build data
+df_metrics = build_country_metrics(selected_year)
+
+if df_metrics.empty:
+    st.warning("No complete data available for the selected year.")
 else:
-    st.warning(f"Insufficient data for network analysis. Found data for {len(df_network)} countries.")
+    st.markdown(f"### Global Analysis for {selected_year} ({len(df_metrics)} countries)")
 
-# -- Country Comparison Radar Chart --
-st.markdown('<div class="section-title">📊 Country Comparison</div>', unsafe_allow_html=True)
+    # ---- Radar + report ----
+        # ---- Radar + report ----
+    col1, col2,col3 = st.columns([1.8,0.2,1])
+    with col1:
+        st.markdown("#### **Radar Comparision**")
+        selected_countries = st.multiselect(
+            "Select Countries for Radar Comparison", 
+            sorted(df_metrics["Country"].unique()), 
+            default=['Germany', 'Italy']
+        )
 
-col6, col7 = st.columns([1, 1])
-
-with col6:
-    st.markdown("**📊 Country Comparison Radar Chart**")
-    
-    # Country selection for comparison
-    comparison_countries = st.multiselect(
-        "Select countries to compare:",
-        available_countries,
-        default=[selected_country] + [c for c in ['United States', 'China', 'Japan'] 
-                                    if c in available_countries and c != selected_country][:3],
-        max_selections=5
-    )
-    
-    if comparison_countries:
-        # Create radar chart
         fig_radar = go.Figure()
-        
-        # Normalize metrics for radar chart
-        def normalize_metric(value, metric_type):
-            ranges = {
-                'GDP per Capita': (0, 100000),
-                'Life Expectancy': (40, 85),
-                'Air Quality (PM2.5)': (0, 100),
-                'Unemployment Rate': (0, 30)
-            }
-            
-            if value is None:
-                return 0
-            
-            min_val, max_val = ranges[metric_type]
-            
-            # Invert for metrics where lower is better
-            if metric_type in ['Air Quality (PM2.5)', 'Unemployment Rate']:
-                normalized = 100 - ((value - min_val) / (max_val - min_val) * 100)
+        def normalize(value, kind):
+            ranges = {'GDP per Capita': (0, 100000), 'Life Expectancy': (40, 85),
+                      'Air Quality (PM2.5)': (0, 100), 'Unemployment Rate': (0, 30)}
+            if value is None: return 0
+            min_v, max_v = ranges[kind]
+            if kind in ['Air Quality (PM2.5)', 'Unemployment Rate']:
+                return 100 - (value - min_v)/(max_v - min_v)*100
             else:
-                normalized = (value - min_val) / (max_val - min_val) * 100
-            
-            return max(0, min(100, normalized))
-        
-        color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+                return (value - min_v)/(max_v - min_v)*100
 
-        # Add trace for each country
-        for idx, country in enumerate(comparison_countries):
-            country_data = get_country_metrics(country, selected_year)
-
-            categories = ['GDP per Capita', 'Life Expectancy', 'Air Quality', 'Employment']
-            values = [
-                normalize_metric(country_data.get("GDP per Capita"), 'GDP per Capita'),
-                normalize_metric(country_data.get("Life Expectancy"), 'Life Expectancy'),
-                normalize_metric(country_data.get("Air Quality (PM2.5)"), 'Air Quality (PM2.5)'),
-                normalize_metric(country_data.get("Unemployment Rate"), 'Unemployment Rate')
-            ]
-
-            fig_radar.add_trace(go.Scatterpolar(
-                r=values,
-                theta=categories,
-                fill='toself',
-                name=country,
-                line=dict(color=color_palette[idx % len(color_palette)], width=3),
-                opacity=0.7
-            ))
-        
-        fig_radar.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 100],
-                    tickmode='linear',
-                    tick0=0,
-                    dtick=20,
-                )
-            ),
-            showlegend=True,
-            height=500,
-            margin=dict(l=10, r=10, t=10, b=10)
-        )
-        
+        for country in selected_countries:
+            df_c = df_metrics[df_metrics["Country"] == country]
+            if not df_c.empty:
+                row = df_c.iloc[0]
+                vals = [
+                    normalize(row["GDP_per_Capita"], 'GDP per Capita'),
+                    normalize(row["Life_Expectancy"], 'Life Expectancy'),
+                    normalize(row["Air_Quality_PM25"], 'Air Quality (PM2.5)'),
+                    normalize(row["Unemployment_Rate"], 'Unemployment Rate')
+                ]
+                fig_radar.add_trace(go.Scatterpolar(r=vals, theta=['GDP per Capita', 'Life Expectancy', 'Air Quality', 'Employment'],
+                                                    name=country, opacity=0.7))
+        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0,100])), showlegend=True)
         st.plotly_chart(fig_radar, use_container_width=True)
-    else:
-        st.info("Please select at least one country for comparison.")
 
-with col7:
-    st.markdown("**🔥 Correlation Heatmap**")
-    
-    # Prepare data for correlation analysis
-    correlation_data = []
-    
-    # Get data for all countries for the selected year
-    for country in available_countries:
-        country_data = get_country_metrics(country, selected_year)
+    with col2:
+        st.title('')
+    with col3:
+        st.markdown("#### **Radar Summary**")
         
-        # Only include countries with complete data
-        if all(v is not None for v in country_data.values()):
-            correlation_data.append({
-                'Country': country,
-                'GDP_per_Capita': country_data["GDP per Capita"],
-                'Life_Expectancy': country_data["Life Expectancy"],
-                'Air_Quality_PM25': country_data["Air Quality (PM2.5)"],
-                'Unemployment_Rate': country_data["Unemployment Rate"]
-            })
-    
-    if len(correlation_data) > 5:
-        df_corr = pd.DataFrame(correlation_data)
+        summary_lines = []
         
-        # Calculate correlation matrix
-        numeric_cols = ['GDP_per_Capita', 'Life_Expectancy', 'Air_Quality_PM25', 'Unemployment_Rate']
-        correlation_matrix = df_corr[numeric_cols].corr()
+        radar_scores = {}
+        for country in selected_countries:
+            df_c = df_metrics[df_metrics["Country"] == country]
+            if not df_c.empty:
+                row = df_c.iloc[0]
+                vals = [
+                    normalize(row["GDP_per_Capita"], 'GDP per Capita'),
+                    normalize(row["Life_Expectancy"], 'Life Expectancy'),
+                    normalize(row["Air_Quality_PM25"], 'Air Quality (PM2.5)'),
+                    normalize(row["Unemployment_Rate"], 'Unemployment Rate')
+                ]
+                avg_score = np.mean(vals)
+                radar_scores[country] = avg_score
         
-        # Create heatmap
-        fig_heatmap = go.Figure(data=go.Heatmap(
-            z=correlation_matrix.values,
-            x=['GDP per Capita', 'Life Expectancy', 'Air Quality (PM2.5)', 'Unemployment Rate'],
-            y=['GDP per Capita', 'Life Expectancy', 'Air Quality (PM2.5)', 'Unemployment Rate'],
-            colorscale='RdBu',
-            zmid=0,
-            text=correlation_matrix.round(2).values,
-            texttemplate="%{text}",
-            textfont={"size": 12},
-            hoverongaps=False,
-            showscale=True
-        ))
-        
-        fig_heatmap.update_layout(
-            title="Attribute Correlations",
-            height=500,
-            xaxis=dict(tickangle=45),
-            yaxis=dict(tickangle=0),
-            margin=dict(l=10, r=10, t=50, b=10)
-        )
-        
+        if radar_scores:
+            best_country = max(radar_scores, key=radar_scores.get)
+            best_score = radar_scores[best_country]
+            
+            # Rank all
+            sorted_scores = sorted(radar_scores.items(), key=lambda x: x[1], reverse=True)
+            rank_lines = [f"🔹 {country}: {score:.1f}%" for country, score in sorted_scores]
+            
+            summary_lines.append(f"🏆 {best_country} leads with an overall performance of {best_score:.1f}% across all categories.")
+            summary_lines.extend(rank_lines)
+        else:
+            summary_lines.append("No data available for selected countries.")
+
+        # Display nicely
+        st.markdown("""
+        <div class="insight-box-left">
+        {}
+        </div>
+        """.format("<br>".join(summary_lines)), unsafe_allow_html=True)
+
+        from PIL import Image
+        img = Image.open("arrow1.png")
+        rotated = img.rotate(-90, expand=True)
+
+        st.markdown("<div style='margin-top: 120px;'></div>", unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.image(rotated, width=220)
+
+        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+
+
+
+
+
+
+
+
+
+    # ---- Correlation + report ----
+    col3, col4,col5 = st.columns([1,0.2,1.8])
+    with col5:
+        st.markdown("#### **Correlation Heatmap**")
+        corr = df_metrics[['GDP_per_Capita', 'Life_Expectancy', 'Air_Quality_PM25', 'Unemployment_Rate']].corr()
+        fig_heatmap = go.Figure(go.Heatmap(z=corr.values, x=corr.columns, y=corr.columns,
+                                           colorscale='RdBu', zmid=0, text=corr.round(2).values,
+                                           texttemplate="%{text}"))
+        fig_heatmap.update_layout( height=500, margin=dict(t=50))
         st.plotly_chart(fig_heatmap, use_container_width=True)
-    else:
-        st.info(f"Insufficient data for correlation analysis. Need data from at least 6 countries, found {len(correlation_data)}.")
+
+        
+    with col4:
+        st.title('')
+    with col3:
+        st.markdown("#### **Correlation Summary**")
+        
+        # Identify strongest positive and negative correlation
+        corr_flat = corr.where(~np.eye(corr.shape[0], dtype=bool)).unstack().dropna()
+        corr_flat = corr_flat.reset_index()
+        corr_flat.columns = ['Var1', 'Var2', 'Correlation']
+        
+        strongest = corr_flat.iloc[corr_flat['Correlation'].abs().idxmax()]
+        
+        summary = (f"📈 Strongest correlation: {strongest['Var1']} & {strongest['Var2']} "
+                f"({strongest['Correlation']:.2f})")
+        
+        st.markdown(f"""
+        <div class="insight-box-right">
+        {summary}<br>
+        Positive means they rise together, negative means one rises as the other falls.
+        </div>
+    """, unsafe_allow_html=True)
+        
+        from PIL import Image
+        img = Image.open("arrow2.png")
+        rotated = img.rotate(-90, expand=True)
+
+        st.markdown("<div style='margin-top: 120px;'></div>", unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.image(rotated, width=210)
+
+        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+
+
+
+    st.markdown('---')
+    # ---- Bubble + mini heatmap ----
+    st.markdown("#### **Bubble Chart + Mini Heatmap**")
+    selected_continent = st.selectbox("Select Continent for bubble chart:", sorted(df_metrics["Continent"].unique()))
+    df_cont = df_metrics[df_metrics["Continent"] == selected_continent]
+
+    xg, yg = df_metrics["GDP_per_Capita"], df_metrics["Life_Expectancy"]
+    xc, yc = df_cont["GDP_per_Capita"], df_cont["Life_Expectancy"]
+
+    fig_bubble = go.Figure()
+
+    fig_bubble.add_trace(go.Scatter(
+        x=xc, y=yc, mode='markers+text',
+        text=df_cont["Country"], textposition='top center',
+        marker=dict(size=np.clip(100 - df_cont["Air_Quality_PM25"], 5, 30),
+                    color=df_cont["Unemployment_Rate"], colorscale='Plasma',
+                    colorbar=dict(title="Unemployment Rate (%)"), opacity=0.85)
+    ))
+
+    fig_bubble.add_trace(go.Scatter(
+        x=[xc.mean()], y=[yc.mean()], mode='markers',
+        marker=dict(symbol='star', size=30, color='gold', line=dict(color='black', width=2)),
+        text=["Avg"], textposition='bottom right', hoverinfo='skip'
+    ))
+
+    heat = go.Histogram2d(
+        x=xc, y=yc,
+        xbins=dict(start=xg.min(), end=xg.max(), size=(xg.max()-xg.min())/20),
+        ybins=dict(start=yg.min(), end=yg.max(), size=(yg.max()-yg.min())/20),
+        colorscale='Hot', opacity=0.3, showscale=False
+    )
+    heat.xaxis = 'x2'
+    heat.yaxis = 'y2'
+    fig_bubble.add_trace(heat)
+
+    fig_bubble.update_layout(
+        xaxis=dict(title="GDP per Capita"),
+        yaxis=dict(title="Life Expectancy"),
+        xaxis2=dict(domain=[0.75,0.95], anchor='y2', range=[xg.min(), xg.max()]),
+        yaxis2=dict(domain=[0.75,0.95], anchor='x2', range=[yg.min(), yg.max()]),
+        height=700,
+        title=f"{selected_continent} Bubble + Global Inset"
+    )
+
+    st.plotly_chart(fig_bubble, use_container_width=True)
+
+st.markdown('---')
+st.markdown("####  **Country Classification Sunburst**")
+st.markdown("""
+<style>
+.sticky-note {
+    display: inline-block;
+    background-color: #fffa8b;
+    color: #333;
+    padding: 0.5rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+    font-size: 0.9rem;
+    height: 110px;
+    width: 170px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="sticky-note">📌 <b>Tip:</b> Click on a continent or country to zoom. Click center to zoom out.</div>', unsafe_allow_html=True)
+
+
+# Compute classes
+median_gdp = df_metrics["GDP_per_Capita"].median()
+median_life = df_metrics["Life_Expectancy"].median()
+df_metrics["GDP_Class"] = df_metrics["GDP_per_Capita"].apply(lambda x: "High GDP" if x >= median_gdp else "Low GDP")
+df_metrics["Life_Class"] = df_metrics["Life_Expectancy"].apply(lambda x: "High Life Exp" if x >= median_life else "Low Life Exp")
+
+labels = []
+parents = []
+values = []
+
+for _, row in df_metrics.iterrows():
+    continent = row["Continent"]
+    gdp_class = f"{continent} - {row['GDP_Class']}"
+    life_class = f"{gdp_class} - {row['Life_Class']}"
+    country = row["Country"]
+
+    if continent not in labels:
+        labels.append(continent)
+        parents.append("")
+        values.append(0)
+
+    if gdp_class not in labels:
+        labels.append(gdp_class)
+        parents.append(continent)
+        values.append(0)
+
+    if life_class not in labels:
+        labels.append(life_class)
+        parents.append(gdp_class)
+        values.append(0)
+
+    labels.append(country)
+    parents.append(life_class)
+    values.append(row["GDP_per_Capita"])
+
+fig_sunburst = go.Figure(go.Sunburst(
+    labels=labels,
+    parents=parents,
+    values=values,
+    branchvalues="remainder",
+    hovertemplate="<b>%{label}</b><br>GDP per Capita: %{value:.0f}<extra></extra>"
+))
+
+fig_sunburst.update_layout(
+    height=700,
+    margin=dict(t=10, l=10, r=10, b=10)
+)
+
+st.plotly_chart(fig_sunburst, use_container_width=True)
+
+st.markdown('---')
+st.markdown("#### **Combined Similarity Network Map**")
+
+# Load your coordinates
+df_coords = pd.read_csv("datasets/longitude-latitude.csv")
+
+# Merge metrics + coordinates
+df_merged = df_metrics.merge(
+    df_coords[['Country', 'Latitude', 'Longitude']], 
+    on="Country", 
+    how="inner"
+)
+
+@st.cache_data
+def compute_similarity(df):
+    features = df[['GDP_per_Capita', 'Life_Expectancy', 'Air_Quality_PM25', 'Unemployment_Rate']]
+    scaler = StandardScaler()
+    scaled = scaler.fit_transform(features)
+    sim_matrix = cosine_similarity(scaled)
+
+    pairs = []
+    countries = df["Country"].tolist()
+    lats = df["Latitude"].tolist()
+    lons = df["Longitude"].tolist()
+
+    for i in range(len(countries)):
+        for j in range(i + 1, len(countries)):
+            sim = sim_matrix[i, j]
+            if sim > 0.95:
+                pairs.append({
+                    "from": countries[i],
+                    "to": countries[j],
+                    "similarity": sim,
+                    "from_lat": lats[i],
+                    "from_lon": lons[i],
+                    "to_lat": lats[j],
+                    "to_lon": lons[j]
+                })
+    return pairs
+
+# Compute all pairs once
+all_pairs = compute_similarity(df_merged)
+
+# --- UI Controls ---
+selected_country = st.selectbox(
+    "Country",
+    options=[""] + sorted(df_merged["Country"].unique()),
+    index=0
+)
+
+# Logic: filter if selected, else show all
+if selected_country:
+    pairs_to_show = [p for p in all_pairs if p["from"] == selected_country or p["to"] == selected_country]
+    focus_row = df_merged[df_merged["Country"] == selected_country].iloc[0]
+    view_state = pdk.ViewState(latitude=focus_row["Latitude"], longitude=focus_row["Longitude"], zoom=2)
+else:
+    pairs_to_show = all_pairs
+    view_state = pdk.ViewState(latitude=0, longitude=0, zoom=1)
+
+# --- Map ---
+arc_layer = pdk.Layer(
+    "ArcLayer",
+    data=pairs_to_show,
+    get_source_position='[from_lon, from_lat]',
+    get_target_position='[to_lon, to_lat]',
+    get_source_color=[0, 0, 200],
+    get_target_color=[0, 0, 200],
+    width_scale=1,
+    width_min_pixels=1,
+    pickable=True,
+    auto_highlight=True
+)
+
+point_layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=df_merged,
+    get_position='[Longitude, Latitude]',
+    get_fill_color=[0, 0, 200],
+    get_radius=30000,
+    pickable=True
+)
+
+r = pdk.Deck(
+    layers=[arc_layer, point_layer],
+    initial_view_state=view_state,
+    map_style='mapbox://styles/mapbox/light-v9',
+    tooltip={
+        "html": "<b>{from}</b> → <b>{to}</b><br>Similarity: {similarity}",
+        "style": {
+            "backgroundColor": "steelblue",
+            "color": "white"
+        }
+    }
+)
+
+st.pydeck_chart(r)
+
+
+# --- Network graph + summary ---
+col1, col2 = st.columns([1, 2])
+
+with col2:
+    G = nx.Graph()
+    for pair in pairs_to_show:
+        G.add_edge(pair["from"], pair["to"], weight=pair["similarity"])
+
+    nodes = [{
+        "name": node,
+        "symbolSize": 10,
+        "itemStyle": {"color": "#2b83ba"}
+    } for node in G.nodes()]
+
+    edges = [{
+        "source": edge[0],
+        "target": edge[1],
+        "value": f"{edge[2]['weight']:.2f}",
+        "lineStyle": {
+            "width": 1 + 4 * (edge[2]['weight'] - 0.95) / 0.05,
+            "color": "#2b83ba",
+            "opacity": 0.7
+        }
+    } for edge in G.edges(data=True)]
+
+    option = {
+        "tooltip": {"formatter": "{b}"},
+        "series": [{
+            "type": "graph",
+            "layout": "force",
+            "roam": True,
+            "label": {"show": True},
+            "force": {"repulsion": 100, "edgeLength": [50, 200]},
+            "data": nodes,
+            "links": edges,
+            "lineStyle": {"opacity": 0.9}
+        }]
+    }
+
+    st_echarts(option, height="700px", key="network_chart")
+
+with col1:
+    st.markdown("#### **Summary**")
+    st.markdown(f"**Nodes:** {len(nodes)}")
+    st.markdown(f"**Edges:** {len(edges)}")
+    summary_df = pd.DataFrame([{
+        "From": e["source"],
+        "To": e["target"],
+        "Similarity": e["value"]
+    } for e in edges])
+    st.dataframe(summary_df, use_container_width=True, height=200)
+
