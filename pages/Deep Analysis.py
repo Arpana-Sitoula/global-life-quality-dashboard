@@ -184,12 +184,6 @@ else:
 
 
 
-
-
-
-
-
-
     # ---- Correlation + report ----
     col3, col4,col5 = st.columns([1,0.2,1.8])
     with col5:
@@ -249,40 +243,68 @@ else:
 
     fig_bubble = go.Figure()
 
+    # Main bubbles for countries
     fig_bubble.add_trace(go.Scatter(
         x=xc, y=yc, mode='markers+text',
+        name=f"{selected_continent} Countries",  
         text=df_cont["Country"], textposition='top center',
-        marker=dict(size=np.clip(100 - df_cont["Air_Quality_PM25"], 5, 30),
-                    color=df_cont["Unemployment_Rate"], colorscale='Plasma',
-                    colorbar=dict(title="Unemployment Rate (%)"), opacity=0.85)
+        marker=dict(
+            size=np.clip(100 - df_cont["Air_Quality_PM25"], 5, 30),
+            color=df_cont["Unemployment_Rate"],
+            colorscale='Plasma',
+            colorbar=dict(title="Unemployment Rate (%)"),
+            opacity=0.85
+        )
     ))
 
+    # Average point
     fig_bubble.add_trace(go.Scatter(
-        x=[xc.mean()], y=[yc.mean()], mode='markers',
-        marker=dict(symbol='star', size=30, color='gold', line=dict(color='black', width=2)),
-        text=["Avg"], textposition='bottom right', hoverinfo='skip'
+        x=[xc.mean()], y=[yc.mean()], mode='markers+text',
+        name="Continent Average",  
+        marker=dict(
+            symbol='star',
+            size=30,
+            color='gold',
+            line=dict(color='black', width=2)
+        ),
+        text=["Avg"], textposition='bottom right',
+        hoverinfo='skip'
     ))
 
+    # Mini heatmap
     heat = go.Histogram2d(
         x=xc, y=yc,
+        name="Density Heatmap", 
         xbins=dict(start=xg.min(), end=xg.max(), size=(xg.max()-xg.min())/20),
         ybins=dict(start=yg.min(), end=yg.max(), size=(yg.max()-yg.min())/20),
-        colorscale='Hot', opacity=0.3, showscale=False
+        colorscale='Hot',
+        opacity=0.5,
+        showscale=False
     )
     heat.xaxis = 'x2'
     heat.yaxis = 'y2'
     fig_bubble.add_trace(heat)
 
+    # Layout
     fig_bubble.update_layout(
         xaxis=dict(title="GDP per Capita"),
         yaxis=dict(title="Life Expectancy"),
         xaxis2=dict(domain=[0.75,0.95], anchor='y2', range=[xg.min(), xg.max()]),
         yaxis2=dict(domain=[0.75,0.95], anchor='x2', range=[yg.min(), yg.max()]),
         height=700,
-        title=f"{selected_continent} Bubble + Global Inset"
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=1.09,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(255,255,255,0.5)",  
+            font=dict(size=10) 
+        )
     )
 
     st.plotly_chart(fig_bubble, use_container_width=True)
+
 
 st.markdown('---')
 st.markdown("####  **Country Classification Sunburst**")
