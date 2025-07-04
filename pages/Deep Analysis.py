@@ -527,4 +527,3 @@ with col1:
         "Similarity": e["value"]
     } for e in edges])
     st.dataframe(summary_df, use_container_width=True, height=200)
-
