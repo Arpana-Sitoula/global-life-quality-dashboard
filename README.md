@@ -12,12 +12,6 @@ This project is an interactive data visualization dashboard that explores the **
   - Air Quality (PM2.5)
   - Unemployment Rate
 
-- **Interactive Dashboard** built with [Streamlit](https://streamlit.io/)
-  - Choropleth maps with time animation
-  - KPI Cards for global averages and change from previous year
-  - Country-specific trends and comparisons
-  - Rankings of best and worst performing countries
-
 ## 🗂️ Project Structure
 
 The dashboard is divided into three main sections:
