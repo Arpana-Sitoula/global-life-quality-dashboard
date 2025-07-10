@@ -1,6 +1,6 @@
 # 🌍 Global Life Quality Dashboard
 
-🔗 **Live Demo:** [Click here to view the dashboard](https://your-app-link.streamlit.app)
+🔗 **Live Demo:** [Click here to view the dashboard]([https://your-app-link.streamlit.app](https://global-life-quality-dashboard.streamlit.app/))
 
 This project is an interactive data visualization dashboard that explores the **quality of life across different countries** using a range of measurable indicators. The goal is to help users gain insights into how life quality varies globally and over time through clear, engaging visualizations.
 
